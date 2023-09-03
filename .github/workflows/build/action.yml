@@ -1,0 +1,39 @@
+name: "Build for "
+description: "Builds application microservices"
+inputs:
+  dotnet_version:
+    description: "Services to builds"
+    required: true
+runs:
+  using: "composite"
+  steps:
+  - uses: actions/checkout@v2
+  - name: Setup .NET Core
+    uses: actions/setup-dotnet@v1
+    with:
+      dotnet-version: ${{ inputs.dotnet_version }}  
+  - name: create applications build
+    shell: pwsh
+    run: |
+      $outputDirectory = Get-Location
+      Write-Host "Our current Working Directory is $outputDirectory"
+      $build_path="$outputDirectory\output"
+      New-Item -Path "$outputDirectory" -Name "output" -ItemType Directory
+      $files = Get-ChildItem "$outputDirectory\services"
+      foreach ($f in $files){
+          $service_path = $f.FullName 
+          $service_name = $f.Name 
+          $service_build_path="$build_path\$service_name"
+          Write-Host "service_path is $service_path"
+          cd $service_path
+          dotnet restore
+          New-Item -Path "$build_path" -Name " $service_name" -ItemType Directory
+          dotnet build --configuration Release --no-restore   -p:PublishSingleFile=true --output  $service_build_path
+
+      }
+      Compress-Archive $build_path\* $outputDirectory\build.zip
+  - name: save artifact
+    uses: actions/upload-artifact@v3
+    with:
+      name: build
+      path: build.zip      
