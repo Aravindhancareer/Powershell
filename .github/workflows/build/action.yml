@@ -35,5 +35,5 @@ runs:
   - name: save artifact
     uses: actions/upload-artifact@v3
     with:
-      name: build
-      path: build.zip      
+      name: builds
+      path: build.zip     
