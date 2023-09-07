@@ -14,14 +14,16 @@ EXPOSE 3000
 ##########################################################################
 FROM base AS final
 WORKDIR /app
-ARG APP_NAME
-ARG BUILD_PATH
+ARG SERVICE_NAME
+ARG SOURCE_PATH
+
+ARG VERSION
 ARG COMMIT_SHA=<not-specified>
 
 ENV SERVICE $SERVICE
 
-COPY "${BUILD_PATH}/${APP_NAME}" ./
+COPY "${SOURCE_PATH}/${SERVICE_NAME}/${VERSION}" ./
 
 RUN echo "%SERVICE_NAME%: $COMMIT_SHA" >> ./commit.sha
 
-CMD ["dotnet", "${APP_NAME}.dll"]
+CMD ["dotnet", "${SERVICE_NAME}.dll"]

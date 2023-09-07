@@ -30,43 +30,44 @@ jobs:
         - name: create docker images
           shell: pwsh
           run: |
-            $outputDirectory = Get-Location
+            $currentPath = Get-Location
             $source_folder="source"
-            $source_path="$outputDirectory\$source_folder"
-            $build_folder="build"
-            $build_path="$outputDirectory\$build_folder"
-            New-Item -Path "$outputDirectory" -Name "$source_folder" -ItemType Directory
-            New-Item -Path "$outputDirectory" -Name "$build_folder" -ItemType Directory
+            $source_path="$currentPath\$source_folder"
+            $git_hash=$(git rev-parse --short "$GITHUB_SHA")
 
-            Expand-Archive "$outputDirectory\build.zip" -DestinationPath $source_path
+            $build_folder="build"
+            $build_path="$currentPath\$build_folder"
+            New-Item -Path "$currentPath" -Name "$source_folder" -ItemType Directory
+            New-Item -Path "$currentPath" -Name "$build_folder" -ItemType Directory
+
+            Expand-Archive "$currentPath\build.zip" -DestinationPath $source_path
            
-            $files = Get-ChildItem "$source_path"
+            $files = Get-ChildItem "$source_path\services"
             foreach ($f in $files){
                  $service_name=$f.Name 
                  $image_name=$service_name.ToLower()
-                 Write-Host docker build --build-arg "APP_NAME=$service_name" --build-arg "BUILD_PATH=$source_folder" --build-arg "COMMIT_SHA=$Hash"  -t "$image_name`:latest" .
-                 
-                 docker build --build-arg "APP_NAME=$service_name" --build-arg "BUILD_PATH=$source_folder" -t "$image_name`:latest" .
-                 New-Item -Path "$build_path" -Name "$service_name" -ItemType Directory
+                 $service_output_path="$build_path\$service_name"
+                 Write-Host "service_name is $service_name, service_output_path is $service_output_path"
+                 New-Item -Path "$service_output_path" -ItemType Directory -Force
+
+                 # get service latest version
+                 $version=Get-ChildItem $source_path/services/$service_name -directory | Where{$_.name -match "(.*)$"}  | ForEach{[pscustomobject]@{'base'=$matches[1]}} | group base | ForEach{($_.Name)} | Select -Last 1
+               
+                 docker build --build-arg "SERVICE_NAME=$service_name" --build-arg "VERSION=$version" --build-arg "SOURCE_PATH=$source_folder/services" --build-arg "COMMIT_SHA=$Env:GITHUB_SHA" -t "$image_name`:latest" .
 
                  docker save  "$image_name`:latest" |  gzip > "$image_name-latest.tar.gz"
+                 Copy "$image_name-latest.tar.gz" "$service_output_path\$image_name-latest.tar.gz"
 
-                 Copy "$image_name-latest.tar.gz" "$build_path\$service_name\$image_name-latest.tar.gz"
+                 # copy applications deployment template to output folder and rename to deployment.yaml
+                 Copy "$currentPath\k8s\${service_name}_deployment.yaml" "$service_output_path\deployment.yaml"
+                 (Get-Content "$service_output_path\deployment.yaml") -Replace "<name>", "$service_name" | Set-Content "$service_output_path\deployment.yaml"
+                 (Get-Content "$service_output_path\deployment.yaml") -Replace "<image>", "$image_name`:latest" | Set-Content "$service_output_path\deployment.yaml"
 
-                 # copy applications deployment template to application folder
-                 Copy "$outputDirectory\k8s\${service_name}_deployment.yaml" "$build_path\$service_name\deployment.yaml"
-                 (Get-Content "$build_path\$service_name\deployment.yaml") -Replace "<name>", "$service_name" | Set-Content "$build_path\$service_name\deployment.yaml"
-                 (Get-Content "$build_path\$service_name\deployment.yaml") -Replace "<image>", "$image_name`:latest" | Set-Content "$build_path\$service_name\deployment.yaml"
-
-                 # Copy Service template to application folder
-                 Copy "$outputDirectory\k8s\${service_name}_service.yaml" "$build_path\$service_name\service.yaml" 
-                 (Get-Content "$build_path\$service_name\service.yaml") -Replace "<name>", "$service_name" | Set-Content "$build_path\$service_name\service.yaml"
+                 # Copy Service template to output folder and rename to service.yaml
+                 Copy "$currentPath\k8s\${service_name}_service.yaml" "$service_output_path\service.yaml" 
+                 (Get-Content "$service_output_path\service.yaml") -Replace "<name>", "$service_name" | Set-Content "$service_output_path\service.yaml"
             }
-            # create final zip 
-            New-Item -Path "$outputDirectory" -Name "artifacts" -ItemType Directory
-
-            #Compress-Archive $build_path\* $outputDirectory\artifacts\deployment.zip
-
+           
         - name: save final artifact
           uses: actions/upload-artifact@v3
           with:
