@@ -11,3 +11,7 @@ $outputDirectory = Get-Location
 Copy "$outputDirectory\deploy\application.yml" "$outputDirectory\application.yml"
 
 (Get-Content "$outputDirectory\application.yml") -Replace "<name>", "$service_name" | Set-Content "$outputDirectory\application.yml"
+
+
+# get service latest version
+$version=Get-ChildItem $source_path/services/$service_name -directory | Where{$_.name -match "^[0-9]+\.[0-9]+\.[0-9]+$"} | Sort-Object -Property Base -Descending | Select -First 1
